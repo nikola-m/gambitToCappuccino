@@ -444,10 +444,10 @@ end do element_loop
 ! Aproach the line where BOUNDARY CONDITIONS are.
   do
     read(4,'(a)') inLine
-    if ( adjustl(inline).ne.'BOUNDARY CONDITIONS 2.0.0') then
-      cycle
-    else
+    if ( adjustl(inLine(1:26)) == 'BOUNDARY CONDITIONS') then
       exit
+    else
+      cycle
     endif
   enddo
  
@@ -483,7 +483,7 @@ end do element_loop
   read(4,'(a)', iostat = ios ) inLine ! Now it should be there
   if(ios /= 0) then
       exit bc_loop   
-  elseif ( adjustl(inline).eq.'BOUNDARY CONDITIONS 2.0.0' ) then
+  elseif ( adjustl(inLine(1:26)) == 'BOUNDARY CONDITIONS' ) then
       read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
       write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
       cycle bc_loop
