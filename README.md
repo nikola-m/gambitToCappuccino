@@ -8,7 +8,7 @@ Converter for GAMBIT file format.
 Description:
 -----------------------
 
-Uses mesh files in Gambit .neu format, either made in Gambit or from Gmsh (which can save meshes in .neu format) and extracts data for usage in freeCappuccino finite volume CFD code.
+Reads mesh files in Gambit .neu format, either made in Gambit or from Gmsh (which can save meshes in .neu format) and converts them to format suitable for usage in freeCappuccino finite volume CFD code.
 
 The main effort is in finding cell pairs that have a common face, which is data often missing from mesh formats inteded for FEM analysis. The Finite Volume Method requires indices of the owner and neighbour cell for each face, and the owner cell for every boundary face, as well as vertex indices for every face.
 

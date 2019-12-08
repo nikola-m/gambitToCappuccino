@@ -1,8 +1,17 @@
  program gambitToCappuccino
 !
+!                       _     _ _   ___   _____                                 _              
+!                      | |   (_) | |__ \ / ____|                               (_)             
+!  __ _  __ _ _ __ ___ | |__  _| |_   ) | |     __ _ _ __  _ __  _   _  ___ ___ _ _ __   ___   
+! / _` |/ _` | '_ ` _ \| '_ \| | __| / /| |    / _` | '_ \| '_ \| | | |/ __/ __| | '_ \ / _ \  
+!| (_| | (_| | | | | | | |_) | | |_ / /_| |___| (_| | |_) | |_) | |_| | (_| (__| | | | | (_) | 
+! \__, |\__,_|_| |_| |_|_.__/|_|\__|____|\_____\__,_| .__/| .__/ \__,_|\___\___|_|_| |_|\___/  
+!  __/ |                                            | |   | |                                                               
+! |___/                                             |_|   |_|                                  
+!
 ! Description:
 !
-! Converts Gambit .neu files to one for use in Cappuccino solver.
+! Converts Gambit .neu file to those compatible with freeCappuccino solver.
 !
 ! Author:
 !   Nikola Mirkov (largeddysimulation@gmail.com)
@@ -31,17 +40,19 @@
  integer :: ndim   ! dimension of the problem. 3 for 3D.
  integer, dimension(:), allocatable :: cface_indx_start ! Where faces list start for each element
  integer, dimension(:,:), allocatable :: fVert ! size[6,value_of(cface(6,nel))] or [6, 6*nel]
- integer, dimension(:,:), allocatable :: fVertUnsrt ! faces list that will not we sorted, see code below.
+ integer, dimension(:,:), allocatable :: fVUnsrt ! faces list that will not we sorted, see code below.
  integer, dimension(:,:), allocatable :: fV         ! faces list that will be sorted, see code below.
  character(len=32), dimension(:), allocatable :: bcName
  integer, dimension(:), allocatable :: bcType  
  integer, dimension(:), allocatable :: bcSize
- 
+ integer, dimension(:), allocatable :: owner
+ integer, dimension(:), allocatable :: neighbour
+
 ! Locals
  integer :: i,k
  integer :: iel, jel
  integer :: indx
- integer :: iface, jface
+ integer :: iface, jface, imatch, ifound
  integer :: numhex ! No. of Hex elements 
  integer :: numpri ! No. of Prism elements
  integer :: numtet ! No. of Tet elements 
@@ -56,12 +67,11 @@
  character ( len = 255 ) input_filename
 
  integer :: nfacesTotal
- integer :: nBoundFaces
+ integer :: nBoundFaces 
  integer :: nInnerFaces
+ integer :: nInnerFacePairs
  integer :: nBoundary
- integer :: ivrtx
  integer :: numVrtx 
-
 
 ! Gambit related
  integer :: NUMNP, NELEM, NGRPS, NBSETS, NDFCD, NDFVL
@@ -89,8 +99,8 @@
   write ( *, '(a)' ) 'gambitToCappuccino'
   write ( *, '(a)' ) '  A preprocessor program for the Cappuccino code.'
   write ( *, '(a)' ) ' '
-  write ( *, '(a)' ) '  Reads mesh in Gambit .neu format and prepares  '
-  write ( *, '(a)' ) '  arrays encoding mesh connectivity.             '
+  write ( *, '(a)' ) '  Reads mesh in Gambit .neu format and produces  '
+  write ( *, '(a)' ) '  mesh files for freeCappuccino solver.          '
   write ( *, '(a)' ) ' '
   write ( *, '(a)' ) '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'
 !
@@ -164,7 +174,7 @@
 
 ! Initialize
   fVert(:,:) = 0
-  cface_indx_start(1) = 1
+  cface_indx_start(1) = 0
 
 ! Skip rows:
 ! ENDOFSECTION
@@ -382,6 +392,8 @@ elseif (NTYPE.eq.5) then
       stop
  endif
 
+
+
 end do element_loop
 
 !
@@ -421,28 +433,25 @@ end do element_loop
   rewind 11
 
 !
-! Boundary conditions
-!
-  nBoundary = 0
-
-! Aproach the line where BOUNDARY CONDITIONS are.
-
-!
 ! There is also CELL GROUPS section which is important,
 ! we skip it for now, but reading that section should be placed here!
 !
 
+!
+! Boundary conditions
+!
 
+! Aproach the line where BOUNDARY CONDITIONS are.
   do
     read(4,'(a)') inLine
-    if ( adjustl(trim(inline)).ne.'BOUNDARY CONDITIONS 2.0.0') then
+    if ( adjustl(inline).ne.'BOUNDARY CONDITIONS 2.0.0') then
       cycle
     else
       exit
     endif
   enddo
  
-  ! Now read the infor to enter bc_loop 
+  ! Now read the info to enter bc_loop 
   read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
   write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
 
@@ -451,14 +460,11 @@ end do element_loop
   ! add to total number of boundary faces
   nBoundFaces = nBoundFaces + NENTRY    
 
-  ! Number of boudaries
-  nBoundary = nBoundary + 1 
-
   ! if(ibcode1.eq.6) then 
   ! ELEMENT_SIDE
   do i=1,NENTRY
-    read(4,'(I10,2I5)') iel, NTYPE, iface
-    indx = cface_indx_start(iel) + iface - 1
+    read(4,*) iel, NTYPE, iface
+    indx = cface_indx_start(iel) + iface 
     
     ! Write to boundary file
     if(fVert(4,indx) == 0) then ! triangle face
@@ -477,7 +483,7 @@ end do element_loop
   read(4,'(a)', iostat = ios ) inLine ! Now it should be there
   if(ios /= 0) then
       exit bc_loop   
-  elseif ( adjustl(trim(inline)).eq.'BOUNDARY CONDITIONS 2.0.0' ) then
+  elseif ( adjustl(inline).eq.'BOUNDARY CONDITIONS 2.0.0' ) then
       read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
       write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
       cycle bc_loop
@@ -490,37 +496,39 @@ end do element_loop
 !+-----------------------------------------------------------------------------+
 ! > END: Read input from Gambit mesh file.
 
+  ! Number of inner face pairs.
+  nInnerFacePairs = nFacesTotal-nBoundFaces 
 
-  ! Number of inner faces.
-  nInnerFaces = nFacesTotal-nBoundFaces 
-
-  ! Backup face vertices in two arrays, one will be sorted - fV, other unsorted-fVertUnsrt
+  ! Backup face vertices in two arrays, one will be sorted - fV, other unsorted-fVUnsrt
   ! Note: 6 = nonofa + 2  
-  allocate ( fV(5,nInnerFaces) )
-  allocate ( fVertUnsrt(5,nInnerFaces) )
+  allocate ( fV(6,nInnerFacePairs) )
+  allocate ( fVUnsrt(5,nInnerFacePairs) )
 
   ! Populate these backup arrays with only inner faces.
-  iface = 0
+  iface = 1
   do i = 1,nfacesTotal
-    if ( fVert(6,i) == 0) then ! it's inner face
-      iface = iface + 1
+    if(iface > nInnerFacePairs ) exit   
+    if ( fVert(6,i) == 0 ) then ! it's inner face
       ! Backup face vertex indices and owner cell index.
-      fV(1:5,iface) = fVert(1:5,i)      
+      fV(1:5,iface) = fVert(1:5,i)    
+      iface = iface + 1        
     endif
   enddo
 
+
   ! Backup unsorted
-  fVertUnsrt = fV
+  fVUnsrt = fV(1:5,:)
 
   ! Free big array with a lot of zeros
   deallocate(fVert)
 
   write ( *, '(2x,a)' ) 'Sort fVert: Begin'
-    do i = 1,nInnerFaces
-      call sortIntArray(fV(:,i),nonofa)
+    do i = 1,nInnerFacePairs
+      call sortIntArray(fV(1:4,i),4)
     enddo
   write ( *, '(2x,a)' ) 'Sort fVert: End'
   write ( *, '(a)' ) ' '
+
 
 !
 ! Sortiram po drugom, trecem, i cetvrtom indeksu. 
@@ -534,14 +542,16 @@ end do element_loop
     ! Do quicksort on a first vertex  - should speed things up considerably
     call QsortC(fV(2,:), &
                 fV(3,:),fV(4,:),fV(1,:),fV(5,:), &
-                fVertUnsrt(1,:),fVertUnsrt(2,:),fVertUnsrt(3,:),fVertUnsrt(4,:))
+                fVUnsrt(1,:),fVUnsrt(2,:),fVUnsrt(3,:),fVUnsrt(4,:))
 
     ! Sada sortiramo samo po drugom indeksu po grupama gde imaju isti prvi indeks
     ! kolika ce grupa biti zavisi, zato povecavamo k koliko mozemo
 
     i=1
     k=i+1
-    do iel=1,nel
+    do
+
+      if( i > nInnerFacePairs ) exit
 
       ! List of faces that have the same index 2 grows by one 
       if(fV(2,i)==fV(2,k)) then    
@@ -553,7 +563,7 @@ end do element_loop
         ! Ready to Go:
         call QsortC(fV(3,i:k-1), &
                     fV(4,i:k-1),fV(1,i:k-1),fV(2,i:k-1),fV(5,i:k-1), &
-                    fVertUnsrt(1,i:k-1),fVertUnsrt(2,i:k-1),fVertUnsrt(3,i:k-1),fVertUnsrt(4,i:k-1))
+                    fVUnsrt(1,i:k-1),fVUnsrt(2,i:k-1),fVUnsrt(3,i:k-1),fVUnsrt(4,i:k-1))
         i=k
         k=i+1
       
@@ -568,7 +578,9 @@ end do element_loop
     ! kolika ce grupa biti zavisi, zato povecavamo k koliko mozemo
     i=1
     k=i+1
-    do iel=1,nel
+    do
+
+      if( i > nInnerFacePairs) exit
 
       ! List of faces that have the same index 3 grows by one 
       if(fV(3,i)==fV(3,k)) then
@@ -580,7 +592,7 @@ end do element_loop
         ! Ready to Go:
         call QsortC(fV(4,i:k-1), &
                   fV(1,i:k-1),fV(2,i:k-1),fV(3,i:k-1),fV(5,i:k-1), &
-                  fVertUnsrt(1,i:k-1),fVertUnsrt(2,i:k-1),fVertUnsrt(3,i:k-1),fVertUnsrt(4,i:k-1))
+                  fVUnsrt(1,i:k-1),fVUnsrt(2,i:k-1),fVUnsrt(3,i:k-1),fVUnsrt(4,i:k-1))
         
         i=k
         k=i+1
@@ -595,71 +607,96 @@ end do element_loop
 
   write ( *, '(2x,a)' ) 'Quicksort fVert: End'
 
-
 !=============================================================================
 
   write ( *, '(a)' ) ' '
   write ( *, '(2x,a)' ) 'Match faces, find owner neighbour: Start'
 
 
-  ! Write number of elements to be written in eery file.
-  nInnerFaces = nInnerFaces / 2 ! because above they were in pairs, duplicated.
-  nFacesTotal = nInnerFaces + nBoundFaces
+  ! Write number of elements to be written in every file.
+  nFacesTotal = nInnerFacePairs/2 + nBoundFaces
+  nInnerFaces = nInnerFacePairs/2
 
-  ! write owner size:
-  write(10,'(i8)') nFacesTotal
+  allocate(owner(nInnerFaces))
+  allocate(neighbour(nInnerFaces))
 
-  ! write neighbour szie
-  write(11,'(i8)') nInnerFaces
+  ifound = 0
 
-  ! write face face file size:
-  write(9,'(i8)') nFacesTotal
+  iface_loop: do iface=1,nInnerFacePairs-1
 
+      ! Lets check if this face has already been matched with its pair 
+      if (fV(6,iface) == 1) cycle iface_loop
 
-  iface_loop: do iface=1,nInnerFaces-1,2
+      imatch_loop: do imatch = iface+1,nInnerFacePairs
 
-      ! if ( fVert(2,iface) == 0 ) cycle iface_loop ! To je onaj skart na pocetku jbg.
+        if ( fV(4,iface) == fV(4,imatch) ) then
+          if ( fV(3,iface) == fV(3,imatch) ) then
+            if ( fV(2,iface) == fV(2,imatch) ) then
+             
+              ! We found match - so lets put one on place 6
+              fV(6,iface) = 1
+              fV(6,imatch) = 1
 
-      ivrtx = 1
-      if ( fV(1,iface) == 0 ) ivrtx = 2 ! tj. kad je face trougao.
+              iel = fV(5,iface)
+              jel = fV(5,imatch)
 
-      numVrtx = nonofa-ivrtx+1
+              ifound = ifound + 1
 
+              if (iel < jel) then
 
-      iel = fV(5,iface)
-      jel = fV(5,iface+1)
+                owner(ifound) = iel
+                neighbour(ifound) = jel
+                fV(1:4,ifound) = fVUnsrt(1:4,iface)
 
-      if (iel < jel) then
+              else
 
-        ! write owner:
-        write(10,'(i8)') iel
+                owner(ifound) = jel
+                neighbour(ifound) = iel 
+                fV(1:4,ifound) = fVUnsrt(1:4,imatch)    
 
-        ! write neighbour
-        write(11,'(i8)') jel
+              endif
+     
+              exit imatch_loop
 
-        ! write face into the face file:
-        write(9,'(5(i0,1x))')  numVrtx, fVertUnsrt(1:numVrtx,iface)
+            endif
+          endif
+        endif
 
-      else
+      enddo imatch_loop 
 
-        ! write owner:
-        write(10,'(i8)') jel
-
-        ! write neighbour
-        write(11,'(i8)') iel 
-
-       ! write face into the face file:
-       write(9,'(5(i0,1x))') numVrtx, fVertUnsrt(1:numVrtx,iface+1)     
-
-      endif
-      
   enddo iface_loop
-
-
-
-!2=============================================================================2!
+!=============================================================================!
 
   write ( *, '(2x,a)' ) 'Match faces, find owner neighbour: End'
+
+  call QsortC2( owner(:), neighbour(:), &
+                fV(1,1:nInnerFaces), fv(2,1:nInnerFaces), fv(3,1:nInnerFaces), fV(4,1:nInnerFaces))
+
+  !
+  ! Write to files
+  !
+
+  ! write owner size:
+  write(10,'(i0)') nFacesTotal
+
+  ! write neighbour szie
+  write(11,'(i0)') nInnerFaces
+
+  ! write face face file size:
+  write(9,'(i0)') nFacesTotal
+
+  do iface=1,nInnerFaces
+
+    numVrtx = 4
+    if ( fV(4,iface) == 0 ) numVrtx = 3 ! tj. kad je face trougao.
+
+    ! write owner:
+    write(10,'(i0)') owner(iface)
+    ! write neighbour
+    write(11,'(i0)') neighbour(iface)
+    ! write face into the face file:
+    write(9,'(5(i0,1x))')  numVrtx, fVUnsrt(1:numVrtx,iface)
+  enddo
 
 
 !
@@ -671,12 +708,13 @@ end do element_loop
 ! Move data from boundary file to owner and faces files, just keep BC info
   rewind 8
 
+  nBoundary = NBSETS
+
   allocate(bcName(nBoundary))
   allocate(bcType(nBoundary))  
   allocate(bcSize(nBoundary)) 
 
   do k=1,nBoundary
-
 
   ! Now read the infor to enter bc_loop 
   read(8,'(A32, 2I10)') bcName(k), bcType(k), bcSize(k)
@@ -686,7 +724,7 @@ end do element_loop
       read(8,*) iel,numVrtx,fV(1:numVrtx,1)
 
         ! write owner:
-        write(10,'(i8)') iel
+        write(10,'(i0)') iel
 
         ! write face into the face file:
         write(9,'(5(i0,1x))')  numVrtx, fV(1:numVrtx,1)
@@ -709,7 +747,7 @@ end do element_loop
   ! that can be a return value from a function like bcTypeToString( bcType(k) )
   do k=1,nBoundary
 
-    write(8,'(a,4i8)') trim(adjustl(bcName(k))), bcType(k), bcSize(k), nInnerFaces
+    write(8,'(a,4(i0,1x))') adjustl(bcName(k)), bcType(k), bcSize(k), nInnerFaces
 
     nInnerFaces = nInnerFaces+bcSize(k)
 
@@ -719,10 +757,9 @@ end do element_loop
 !  > CLOSE polyMesh format file: 'boundary', 'faces', 'owner', 'neighbour'.
 !
   close(8)
-  close (9)
-  close (10)
-  close (11)
-
+  close(9)
+  close(10)
+  close(11)
   close(4)
 
 
@@ -730,9 +767,10 @@ end do element_loop
 !  > Administrative tasks.
 !
   deallocate ( fV )
-  deallocate ( fVertUnsrt )
+  deallocate ( fVUnsrt )
   deallocate ( cface_indx_start )
-
+  deallocate( owner )
+  deallocate( neighbour )
   deallocate(bcName)
   deallocate(bcType)  
   deallocate(bcSize) 

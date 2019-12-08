@@ -893,6 +893,4 @@ subroutine i4vec_print2 ( n, a, b, title )
   return
 end
 
-
-
 end module utils

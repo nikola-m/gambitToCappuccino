@@ -1,4 +1,4 @@
-November 30 2019  10:58:53.172 PM
+December  8 2019   5:31:12.812 PM
  
                        _     _ _   ___   _____                                 _              
                       | |   (_) | |__ \ / ____|                               (_)             
@@ -13,8 +13,8 @@ November 30 2019  10:58:53.172 PM
 gambitToCappuccino
   A preprocessor program for the Cappuccino code.
  
-  Reads mesh in Gambit .neu format and prepares  
-  arrays encoding mesh connectivity.             
+  Reads mesh in Gambit .neu format and produces  
+  mesh files for freeCappuccino solver.          
  
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
  
@@ -49,4 +49,4 @@ Enter the filename prefix:
 gambitToCappuccino:
   Normal end of execution.
  
-November 30 2019  10:58:56.148 PM
+December  8 2019   5:31:16.865 PM
