@@ -76,10 +76,13 @@
 ! Gambit related
  integer :: NUMNP, NELEM, NGRPS, NBSETS, NDFCD, NDFVL
  integer :: NP
- integer :: NE, NTYPE, NDP, NODE(8)
+ integer :: NE, NTYPE, NDP, NODE(8), elem(4)
  integer :: ITYPE, NENTRY, NVALUES, IBCODE1
- character(len=32) :: inLine
+ integer :: NGP, NELGP, MTYP, NFLAGS
+ character( len = 82 ) :: inLine
+ character (len = 32) :: string(4)
  real(dp), dimension(3) :: XCOO
+
 
 ! 1) Intro
 !+-----------------------------------------------------------------------------+
@@ -173,7 +176,6 @@
   allocate ( cface_indx_start(nel+1) )
 
 ! Initialize
-  fVert(:,:) = 0
   cface_indx_start(1) = 0
 
 ! Skip rows:
@@ -433,65 +435,109 @@ end do element_loop
   rewind 11
 
 !
-! There is also CELL GROUPS section which is important,
-! we skip it for now, but reading that section should be placed here!
+! Element groupds and Boundary conditions
 !
 
-!
-! Boundary conditions
-!
-
-! Aproach the line where BOUNDARY CONDITIONS are.
+  ! Aproach the line where BOUNDARY CONDITIONS and ELEMENT GROUP sections are.
   do
+
     read(4,'(a)') inLine
+
     if ( adjustl(inLine(1:26)) == 'BOUNDARY CONDITIONS') then
-      exit
-    else
-      cycle
-    endif
-  enddo
- 
-  ! Now read the info to enter bc_loop 
-  read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
-  write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
-
-  bc_loop: do
-
-  ! add to total number of boundary faces
-  nBoundFaces = nBoundFaces + NENTRY    
-
-  ! if(ibcode1.eq.6) then 
-  ! ELEMENT_SIDE
-  do i=1,NENTRY
-    read(4,*) iel, NTYPE, iface
-    indx = cface_indx_start(iel) + iface 
-    
-    ! Write to boundary file
-    if(fVert(4,indx) == 0) then ! triangle face
-      write(8,'(i0,1x,a,1x,3(i0,1x))') iel,' 3',fVert(1:3,indx)
-    else                             ! quad face
-      write(8,'(i0,1x,a,1x,4(i0,1x))') iel,' 4', fVert(1:4,indx)
-    endif
-
-    ! Mark face as boundary face: on position 6 put 1.
-    fVert(6,indx) = 1
-
-  enddo
 
 
-  read(4,'(a)') inLine ! ENDOFSECTION string
-  read(4,'(a)', iostat = ios ) inLine ! Now it should be there
-  if(ios /= 0) then
-      exit bc_loop   
-  elseif ( adjustl(inLine(1:26)) == 'BOUNDARY CONDITIONS' ) then
+      ! Now read the info to enter bc_loop 
       read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
       write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
-      cycle bc_loop
-  else
-      exit bc_loop
-  endif
 
-  enddo bc_loop
+      bc_loop: do
+
+        ! add to total number of boundary faces
+        nBoundFaces = nBoundFaces + NENTRY    
+
+        ! if(ibcode1.eq.6) then 
+        ! ELEMENT_SIDE
+        do i=1,NENTRY
+          read(4,*) iel, NTYPE, iface
+          indx = cface_indx_start(iel) + iface 
+          
+          ! Write to boundary file
+          if(fVert(4,indx) == 0) then ! triangle face
+            write(8,'(i0,1x,a,1x,3(i0,1x))') iel,' 3',fVert(1:3,indx)
+          else                        ! quad face
+            write(8,'(i0,1x,a,1x,4(i0,1x))') iel,' 4', fVert(1:4,indx)
+          endif
+
+          ! Mark face as boundary face: on position 6 put 1.
+          fVert(6,indx) = 1
+
+        enddo
+
+
+        read(4,'(a)') inLine ! ENDOFSECTION string
+        read(4,'(a)', iostat = ios ) inLine ! Now it should be there
+        if(ios /= 0) then
+            exit bc_loop   
+        elseif ( adjustl(inLine(1:26)) == 'BOUNDARY CONDITIONS' ) then
+            read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
+            write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
+            cycle bc_loop
+        else
+            exit bc_loop
+        endif
+
+      enddo bc_loop
+
+      exit ! When we read BC info that's the end of the file.
+
+    elseif ( adjustl(inLine(1:20)) == 'ELEMENT GROUP') then ! We cut last characters which hold the file version...
+
+      ! Read element group data
+      read(4, '(a)' ) inLine
+      read( inLine(8:17), * ) NGP
+      read( inLine(29:38), * ) NELGP
+      read( inLine(50:50), * ) MTYP    
+      read( inLine(60:69), * ) NFLAGS  
+
+      write(string(1),*) NGP
+      open(unit=13,file='cellgroup-'//adjustl(string(1)) )
+      rewind 13
+
+      write(13,'(2I8,a)') NELGP,MTYP,' NELGP,MTYP'
+
+      ! For next two lines I cannot still find use.
+      read(4,'(a)') inLine
+      read(4,'(a)') inLine
+
+      ! NELGP/10 lines with 10 numbers
+      do i=1, NELGP/10
+        read(4,'(10I8)') (elem(k), k=1,10)
+        do k=1,10
+          write(13,'(I8)') elem(k)
+        enddo
+      enddo
+
+      ! One last line with less then 10 elements
+      indx = NELGP - 10*(NELGP/10) 
+      read(4,'(10I8)') (elem(k), k=1,indx)
+      do k=1,indx
+        write(13,'(I8)') elem(k)
+      enddo
+
+      read(4,'(a)') inLine ! ENDOFSECTION string
+
+      close(13)
+
+      cycle
+
+    else
+
+      cycle
+
+    endif
+
+  enddo
+ 
 
 !+-----------------------------------------------------------------------------+
 ! > END: Read input from Gambit mesh file.
