@@ -477,19 +477,6 @@ end do element_loop
         enddo
 
         read(4,'(a)') inLine ! ENDOFSECTION string
-        ! read(4,'(a)', iostat = ios ) inLine ! Now it should be there
-        ! if(ios /= 0) then
-        !     exit bc_read_loop   
-        ! elseif ( adjustl(inLine(1:26)) == 'BOUNDARY CONDITIONS' ) then
-        !     read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
-        !     write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
-        !     cycle bc_read_loop
-        ! else
-        !     exit bc_read_loop
-        ! endif
-
-      ! enddo bc_read_loop
-
 
       cycle bc_loop
 
