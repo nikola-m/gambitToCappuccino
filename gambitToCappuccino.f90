@@ -190,7 +190,7 @@
   rewind 7
 
   ! Write size of cells arrays
-  write(7, '(i8)') nonome
+  write(7, '(i8,a)') nonome, ' numPoints'
 
 ! Read nodal coordinates
   do i=1,nonome
@@ -228,7 +228,7 @@
   rewind 12
 
   ! Write size of cells arrays
-  write(12, '(i8)') nel
+  write(12, '(i8,a)') nel, ' numCells'
 
 ! Read elements
   element_loop: do i=1,nel
@@ -439,9 +439,12 @@ end do element_loop
 !
 
   ! Aproach the line where BOUNDARY CONDITIONS and ELEMENT GROUP sections are.
-  do
+  bc_loop: do
 
-    read(4,'(a)') inLine
+    read(4,'(a)', iostat = ios ) inLine
+    if(ios /= 0) then
+        exit bc_loop  
+    endif
 
     if ( adjustl(inLine(1:26)) == 'BOUNDARY CONDITIONS') then
 
@@ -450,7 +453,7 @@ end do element_loop
       read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
       write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
 
-      bc_loop: do
+      ! bc_read_loop: do
 
         ! add to total number of boundary faces
         nBoundFaces = nBoundFaces + NENTRY    
@@ -473,22 +476,22 @@ end do element_loop
 
         enddo
 
-
         read(4,'(a)') inLine ! ENDOFSECTION string
-        read(4,'(a)', iostat = ios ) inLine ! Now it should be there
-        if(ios /= 0) then
-            exit bc_loop   
-        elseif ( adjustl(inLine(1:26)) == 'BOUNDARY CONDITIONS' ) then
-            read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
-            write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
-            cycle bc_loop
-        else
-            exit bc_loop
-        endif
+        ! read(4,'(a)', iostat = ios ) inLine ! Now it should be there
+        ! if(ios /= 0) then
+        !     exit bc_read_loop   
+        ! elseif ( adjustl(inLine(1:26)) == 'BOUNDARY CONDITIONS' ) then
+        !     read(4,'(A32, 4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
+        !     write(8,'(A32,4I10)') inLine, ITYPE, NENTRY, NVALUES, IBCODE1
+        !     cycle bc_read_loop
+        ! else
+        !     exit bc_read_loop
+        ! endif
 
-      enddo bc_loop
+      ! enddo bc_read_loop
 
-      exit ! When we read BC info that's the end of the file.
+
+      cycle bc_loop
 
     elseif ( adjustl(inLine(1:20)) == 'ELEMENT GROUP') then ! We cut last characters which hold the file version...
 
@@ -519,25 +522,27 @@ end do element_loop
 
       ! One last line with less then 10 elements
       indx = NELGP - 10*(NELGP/10) 
-      read(4,'(10I8)') (elem(k), k=1,indx)
-      do k=1,indx
-        write(13,'(I8)') elem(k)
-      enddo
+      if (indx /= 0) then
+        read(4,'(10I8)') (elem(k), k=1,indx)
+        do k=1,indx
+          write(13,'(I8)') elem(k)
+        enddo
+      endif
 
       read(4,'(a)') inLine ! ENDOFSECTION string
 
       close(13)
 
-      cycle
+      cycle bc_loop
 
     else
 
-      cycle
+      cycle bc_loop
 
     endif
 
-  enddo
- 
+  enddo bc_loop
+
 
 !+-----------------------------------------------------------------------------+
 ! > END: Read input from Gambit mesh file.
@@ -723,13 +728,13 @@ end do element_loop
   !
 
   ! write owner size:
-  write(10,'(i0)') nFacesTotal
+  write(10,'(i0,a)') nFacesTotal, ' numFaces'
 
   ! write neighbour szie
-  write(11,'(i0)') nInnerFaces
+  write(11,'(i0,a)') nInnerFaces, ' numInnerFaces'
 
   ! write face face file size:
-  write(9,'(i0)') nFacesTotal
+  write(9,'(i0,a)') nFacesTotal, ' numFaces'
 
   do iface=1,nInnerFaces
 
