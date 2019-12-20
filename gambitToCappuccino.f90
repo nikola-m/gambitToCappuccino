@@ -228,7 +228,7 @@
   rewind 12
 
   ! Write size of cells arrays
-  write(12, '(i8,a)') nel, ' numCells'
+  write(12, '(i0,a)') nel, ' numCells'
 
 ! Read elements
   element_loop: do i=1,nel
