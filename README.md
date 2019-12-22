@@ -19,7 +19,8 @@ Cell connectivity in 'cells' file is not used in computation in freeCappucino co
 The code writes following files: 'points', 'cells', 'faces', 'owner', 'neighbour', 'boundary'
 
 Run with 2cylinder.neu example.
+```
+./gambitToCappuccino
 
-> ./gambitToCappuccino
-
-> 2cylinder
+2cylinder
+```
