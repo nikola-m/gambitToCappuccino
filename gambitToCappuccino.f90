@@ -733,7 +733,7 @@ end do element_loop
     ! write neighbour
     write(11,'(i0)') neighbour(iface)
     ! write face into the face file:
-    write(9,'(5(i0,1x))')  numVrtx, fVUnsrt(1:numVrtx,iface)
+    write(9,'(5(i0,1x))')  numVrtx, fV(1:numVrtx,iface)
   enddo
 
 
