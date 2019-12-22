@@ -30,6 +30,8 @@ The code writes following files: 'points', 'cells', 'faces', 'owner', 'neighbour
 
 Run with 2cylinder.neu example.
 ```
+make
+
 ./gambitToCappuccino
 
 2cylinder
